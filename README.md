@@ -9,10 +9,10 @@ A minimalist, Nothing OS-inspired clock application featuring a clean dot-matrix
 
 ## 📷 Preview
 
-> **Design Philosophy:** Essentialism. Only what you need, when you need it, wrapped in monochrome dots and stark typography.
+<img width="295" height="530" alt="image" src="https://github.com/user-attachments/assets/da75aa2c-a45d-4703-856f-45e4f008883c" />
+<img width="285" height="534" alt="image" src="https://github.com/user-attachments/assets/eda01f35-9f67-4523-99a4-3931998b4c80" />
+<img width="285" height="534" alt="image" src="https://github.com/user-attachments/assets/ba17ab2a-b944-4427-9649-0e624947efae" />
 
-*(Drop a screenshot or GIF of your beautiful UI here!)*
-`🚨 Add your image path: ![App Screenshot](./assets/preview.png)`
 
 ---
 
@@ -33,8 +33,5 @@ A minimalist, Nothing OS-inspired clock application featuring a clean dot-matrix
 
 ## 🚀 Getting Started
 
-### 1. Clone & Install
-```bash
-git clone [https://github.com/yourusername/nothing-clock-ai.git](https://github.com/yourusername/nothing-clock-ai.git)
-cd nothing-clock-ai
+Check the releases for .apk files
 
