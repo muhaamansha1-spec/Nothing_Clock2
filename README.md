@@ -33,5 +33,6 @@ A minimalist, Nothing OS-inspired clock application featuring a clean dot-matrix
 
 ## 🚀 Getting Started
 
-Check the releases for .apk files
+Check the releases for .zip files and use android studio to compile it to apk
+
 
