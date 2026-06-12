@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@android:color/transparent"
+    android:padding="8dp">
+
+    <!-- Digital TextClock for the numbers (float purely, no card container) -->
+    <TextClock
+        android:id="@+id/widget_text_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:format12Hour="h:mm"
+        android:format24Hour="HH:mm"
+        android:textColor="#FFFFFF"
+        android:textSize="52sp"
+        android:fontFamily="@font/dotmatrix"
+        android:textStyle="bold"
+        android:letterSpacing="-0.03"
+        android:gravity="center"
+        android:background="@android:color/transparent" />
+
+    <!-- Synchronized auto-updating Date / Day text beneath -->
+    <TextClock
+        android:id="@+id/widget_date_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:format12Hour="EEE, MMM d"
+        android:format24Hour="EEE, MMM d"
+        android:textColor="#B3FFFFFF"
+        android:textSize="12sp"
+        android:fontFamily="@font/dotmatrix"
+        android:letterSpacing="0.25"
+        android:gravity="center"
+        android:layout_marginTop="2dp"
+        android:background="@android:color/transparent" />
+
+</LinearLayout>
