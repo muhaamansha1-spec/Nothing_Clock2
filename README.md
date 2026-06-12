@@ -25,8 +25,8 @@ A minimalist, Nothing OS-inspired clock application featuring a clean dot-matrix
 
 ## 🛠️ Tech Stack
 
-* **Frontend:** [e.g., React / Next.js / Flutter / HTML & Tailwind]
-* **AI Engine:** Google AI Studio (`gemini-1.5-flash`)
+* **Frontend:** Kotlin
+* **AI Engine:** Google AI Studio (`gemini-3.5-flash`)
 * **Styling:** Custom Dot-Matrix Fonts & Monochrome CSS Variables
 
 ---
