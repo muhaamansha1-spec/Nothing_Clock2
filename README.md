@@ -28,7 +28,8 @@ A minimalist, Nothing OS-inspired clock application featuring a clean dot-matrix
 * **Frontend:** Kotlin
 * **AI Engine:** Google AI Studio (`gemini-3.5-flash`)
 * **Styling:** Custom Dot-Matrix Fonts & Monochrome CSS Variables
-
+## V1.1
+Added music controls to landscape dock mode. Added anti burn-in for oleds. Compatible with alll music apps.
 ---
 
 ## 🚀 Getting Started
