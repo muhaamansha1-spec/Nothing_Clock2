@@ -7,6 +7,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.model.Alarm
 import com.example.data.model.WorldClock
 import com.example.data.repository.ClockRepository
+import com.example.service.AudioSynthPlayer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.TimeZone
+import java.util.Calendar
+import java.util.Locale
+import java.text.SimpleDateFormat
+import android.content.Intent
 
 enum class ClockSection {
     ALARMS, WORLD_CLOCK, STOPWATCH, TIMER
@@ -47,6 +52,34 @@ class ClockViewModel(application: Application) : AndroidViewModel(application) {
         sharedPrefs.edit().putString("camera_cutout", cutout.name).apply()
     }
 
+    // 12-hour vs 24-hour setting state
+    private val _is24Hour = MutableStateFlow(
+        sharedPrefs.getBoolean("is_24_hour", true)
+    )
+    val is24Hour: StateFlow<Boolean> = _is24Hour.asStateFlow()
+
+    fun setIs24Hour(enabled: Boolean) {
+        _is24Hour.value = enabled
+        sharedPrefs.edit().putBoolean("is_24_hour", enabled).apply()
+    }
+
+    // Ringtone alert states
+    private val _ringingAlarm = MutableStateFlow<Alarm?>(null)
+    val ringingAlarm: StateFlow<Alarm?> = _ringingAlarm.asStateFlow()
+
+    private val _isTimerRinging = MutableStateFlow(false)
+    val isTimerRinging: StateFlow<Boolean> = _isTimerRinging.asStateFlow()
+
+    private val _timerRingtone = MutableStateFlow(
+        sharedPrefs.getString("timer_ringtone", "TEENAGE AMBIENT") ?: "TEENAGE AMBIENT"
+    )
+    val timerRingtone: StateFlow<String> = _timerRingtone.asStateFlow()
+
+    fun setTimerRingtone(ringtone: String) {
+        _timerRingtone.value = ringtone
+        sharedPrefs.edit().putString("timer_ringtone", ringtone).apply()
+    }
+
     // Section state
     private val _currentSection = MutableStateFlow(ClockSection.ALARMS)
     val currentSection: StateFlow<ClockSection> = _currentSection.asStateFlow()
@@ -66,48 +99,91 @@ class ClockViewModel(application: Application) : AndroidViewModel(application) {
     private val _ticker = MutableStateFlow(System.currentTimeMillis())
     val ticker: StateFlow<Long> = _ticker.asStateFlow()
 
+    private var lastTriggeredMinute = -1
+
     init {
-        // Start ticker loop
+        // Synchronize with background AlarmStateHolder
+        viewModelScope.launch {
+            com.example.service.AlarmStateHolder.ringingAlarm.collect { alarm ->
+                _ringingAlarm.value = alarm
+            }
+        }
+        viewModelScope.launch {
+            com.example.service.AlarmStateHolder.isTimerRinging.collect { ringing ->
+                _isTimerRinging.value = ringing
+            }
+        }
+
+        // Start ticker loop for local UI updates
         viewModelScope.launch {
             repository.prepopulateIfEmpty()
             while (true) {
-                _ticker.value = System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+                _ticker.value = now
                 delay(1000)
             }
         }
     }
 
+    fun dismissAlarm() {
+        val intent = Intent(getApplication(), com.example.service.AlarmTriggerService::class.java).apply {
+            action = com.example.service.AlarmTriggerService.ACTION_STOP_ALARM
+        }
+        getApplication<Application>().startService(intent)
+    }
+
+    fun snoozeAlarm() {
+        val intent = Intent(getApplication(), com.example.service.AlarmTriggerService::class.java).apply {
+            action = com.example.service.AlarmTriggerService.ACTION_SNOOZE_ALARM
+        }
+        getApplication<Application>().startService(intent)
+    }
+
     // Alarm Actions
     fun toggleAlarm(alarm: Alarm) {
         viewModelScope.launch {
-            repository.updateAlarm(alarm.copy(isEnabled = !alarm.isEnabled))
+            val updated = alarm.copy(isEnabled = !alarm.isEnabled)
+            repository.updateAlarm(updated)
+            if (updated.isEnabled) {
+                com.example.service.SystemAlarmScheduler.scheduleAlarm(getApplication(), updated)
+            } else {
+                com.example.service.SystemAlarmScheduler.cancelAlarm(getApplication(), updated)
+            }
         }
     }
 
-    fun addAlarm(hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean) {
+    fun addAlarm(hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean, ringtone: String = "GLYPH RAPID") {
         viewModelScope.launch {
-            repository.insertAlarm(
-                Alarm(
-                    hour = hour,
-                    minute = minute,
-                    daysOfWeek = daysOfWeek,
-                    label = label,
-                    isEnabled = true,
-                    isVibrateEnabled = vibrate
-                )
+            val alarm = Alarm(
+                hour = hour,
+                minute = minute,
+                daysOfWeek = daysOfWeek,
+                label = label,
+                isEnabled = true,
+                isVibrateEnabled = vibrate,
+                ringtone = ringtone
             )
+            val insertedId = repository.insertAlarm(alarm).toInt()
+            val scheduledAlarm = alarm.copy(id = insertedId)
+            com.example.service.SystemAlarmScheduler.scheduleAlarm(getApplication(), scheduledAlarm)
         }
     }
 
     fun updateAlarm(alarm: Alarm) {
         viewModelScope.launch {
             repository.updateAlarm(alarm)
+            if (alarm.isEnabled) {
+                com.example.service.SystemAlarmScheduler.scheduleAlarm(getApplication(), alarm)
+            } else {
+                com.example.service.SystemAlarmScheduler.cancelAlarm(getApplication(), alarm)
+            }
         }
     }
 
     fun deleteAlarm(alarm: Alarm) {
         viewModelScope.launch {
             repository.deleteAlarm(alarm)
+            com.example.service.SystemAlarmScheduler.cancelAlarm(getApplication(), alarm)
         }
     }
 
@@ -210,34 +286,69 @@ class ClockViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startTimer() {
         if (_timerSecondsRemaining.value <= 0) return
+        timerJob?.cancel()
+        _isTimerRinging.value = false
+        AudioSynthPlayer.stop()
         _timerState.value = TimerState.RUNNING
+        
+        // Schedule system AlarmManager timer
+        com.example.service.SystemAlarmScheduler.scheduleTimer(
+            getApplication(),
+            _timerSecondsRemaining.value,
+            _timerRingtone.value
+        )
+
         timerJob = viewModelScope.launch {
             while (_timerSecondsRemaining.value > 0) {
                 delay(1000)
                 _timerSecondsRemaining.value -= 1
             }
-            // Finished
             _timerState.value = TimerState.IDLE
             _timerDurationInput.value = 0
             _timerSecondsRemaining.value = 0
-            // Trigger visual or alert confirmation
+            // When finished, the AlarmManager triggers the BroadcastReceiver which starts AlarmTriggerService,
+            // which sets AlarmStateHolder.isTimerRinging to true, which we collect reactively in _isTimerRinging!
         }
+    }
+
+    fun dismissTimerRingtone() {
+        _isTimerRinging.value = false
+        AudioSynthPlayer.stop()
+        val intent = Intent(getApplication(), com.example.service.AlarmTriggerService::class.java).apply {
+            action = com.example.service.AlarmTriggerService.ACTION_STOP_TIMER
+        }
+        getApplication<Application>().startService(intent)
     }
 
     fun pauseTimer() {
         if (_timerState.value != TimerState.RUNNING) return
         _timerState.value = TimerState.PAUSED
         timerJob?.cancel()
+        com.example.service.SystemAlarmScheduler.cancelTimer(getApplication())
     }
 
     fun resetTimer() {
         timerJob?.cancel()
+        com.example.service.SystemAlarmScheduler.cancelTimer(getApplication())
+        _isTimerRinging.value = false
+        AudioSynthPlayer.stop()
+        val intent = Intent(getApplication(), com.example.service.AlarmTriggerService::class.java).apply {
+            action = com.example.service.AlarmTriggerService.ACTION_STOP_TIMER
+        }
+        getApplication<Application>().startService(intent)
         _timerState.value = TimerState.IDLE
         _timerSecondsRemaining.value = _timerDurationInput.value
     }
 
     fun clearTimer() {
         timerJob?.cancel()
+        com.example.service.SystemAlarmScheduler.cancelTimer(getApplication())
+        _isTimerRinging.value = false
+        AudioSynthPlayer.stop()
+        val intent = Intent(getApplication(), com.example.service.AlarmTriggerService::class.java).apply {
+            action = com.example.service.AlarmTriggerService.ACTION_STOP_TIMER
+        }
+        getApplication<Application>().startService(intent)
         _timerState.value = TimerState.IDLE
         _timerDurationInput.value = 0
         _timerSecondsRemaining.value = 0

@@ -10,6 +10,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -47,6 +48,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,8 +69,9 @@ import com.example.data.model.Alarm
 @Composable
 fun AlarmsScreen(
     alarms: List<Alarm>,
+    is24Hour: Boolean = true,
     onToggleAlarm: (Alarm) -> Unit,
-    onAddAlarm: (hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean) -> Unit,
+    onAddAlarm: (hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean, ringtone: String) -> Unit,
     onDeleteAlarm: (Alarm) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
@@ -207,6 +212,7 @@ fun AlarmsScreen(
                         items(alarms, key = { it.id }) { alarm ->
                             AlarmItemRow(
                                 alarm = alarm,
+                                is24Hour = is24Hour,
                                 onToggle = { onToggleAlarm(alarm) },
                                 onDelete = { onDeleteAlarm(alarm) }
                             )
@@ -259,6 +265,7 @@ fun AlarmsScreen(
                     items(alarms, key = { it.id }) { alarm ->
                         AlarmItemRow(
                             alarm = alarm,
+                            is24Hour = is24Hour,
                             onToggle = { onToggleAlarm(alarm) },
                             onDelete = { onDeleteAlarm(alarm) }
                         )
@@ -306,9 +313,13 @@ fun AlarmsScreen(
 
         if (showAddDialog) {
             AddAlarmDialog(
-                onDismiss = { showAddDialog = false },
-                onAdd = { hour, minute, days, label, invite ->
-                    onAddAlarm(hour, minute, days, label, invite)
+                onDismiss = {
+                    com.example.service.AudioSynthPlayer.stop()
+                    showAddDialog = false
+                },
+                onAdd = { hour, minute, days, label, invite, ringtone ->
+                    com.example.service.AudioSynthPlayer.stop()
+                    onAddAlarm(hour, minute, days, label, invite, ringtone)
                     showAddDialog = false
                 }
             )
@@ -316,20 +327,25 @@ fun AlarmsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlarmItemRow(
     alarm: Alarm,
+    is24Hour: Boolean,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val formattedTime = String.format("%02d:%02d", alarm.hour, alarm.minute)
-    val period = if (alarm.hour >= 12) "PM" else "AM"
-    val displayHour = when {
-        alarm.hour == 0 -> 12
-        alarm.hour > 12 -> alarm.hour - 12
-        else -> alarm.hour
+    val timeStr = if (is24Hour) {
+        String.format("%02d:%02d", alarm.hour, alarm.minute)
+    } else {
+        val displayHour = when {
+            alarm.hour == 0 -> 12
+            alarm.hour > 12 -> alarm.hour - 12
+            else -> alarm.hour
+        }
+        String.format("%02d:%02d", displayHour, alarm.minute)
     }
-    val timeStr = String.format("%02d:%02d", displayHour, alarm.minute)
+    val period = if (is24Hour) "" else if (alarm.hour >= 12) "PM" else "AM"
 
     val cardBg = if (alarm.isEnabled) Color(0x2B18181B) else Color(0x1918181B)
 
@@ -365,15 +381,17 @@ fun AlarmItemRow(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = period,
-                            color = if (alarm.isEnabled) Color(0xFFFF2B2B) else Color(0xFF555555),
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
+                        if (period.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = period,
+                                color = if (alarm.isEnabled) Color(0xFFFF2B2B) else Color(0xFF555555),
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                        }
                     }
                     if (alarm.label.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -383,7 +401,35 @@ fun AlarmItemRow(
                             fontSize = 11.sp,
                             fontFamily = FontFamily.SansSerif,
                             fontWeight = FontWeight.Medium,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.sp,
+                            maxLines = 1,
+                            modifier = Modifier.basicMarquee()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (alarm.isEnabled) Color(0x1AFFFFFF) else Color(0x0AFFFFFF))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Ringtone",
+                            tint = if (alarm.isEnabled) Color(0xFFFF2B2B) else Color(0xFF555555),
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = alarm.ringtone,
+                            color = if (alarm.isEnabled) Color(0xB3FFFFFF) else Color(0xFF555555),
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            modifier = Modifier.basicMarquee()
                         )
                     }
                 }
@@ -477,11 +523,14 @@ fun AlarmItemRow(
 @Composable
 fun AddAlarmDialog(
     onDismiss: () -> Unit,
-    onAdd: (hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean) -> Unit
+    onAdd: (hour: Int, minute: Int, daysOfWeek: String, label: String, vibrate: Boolean, ringtone: String) -> Unit
 ) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var hour by remember { mutableStateOf("07") }
     var minute by remember { mutableStateOf("00") }
     var label by remember { mutableStateOf("") }
+    var selectedRingtone by remember { mutableStateOf("GLYPH RAPID") }
+    val coroutineScope = rememberCoroutineScope()
     
     // Day Selection State
     val dayAbbreviations = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -636,6 +685,7 @@ fun AddAlarmDialog(
                                 .background(bg)
                                 .border(1.dp, if (isSel) Color.Transparent else Color(0xFF2C2C2C), CircleShape)
                                 .clickable {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                     selectedDays = if (isSel) {
                                         selectedDays - abbrev
                                     } else {
@@ -651,6 +701,66 @@ fun AddAlarmDialog(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "SELECT RINGTONE",
+                    color = Color(0xFF888888),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val ringtones = com.example.service.CustomRingtoneManager.getAllRingtones()
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ringtones.chunked(2).forEach { rowList ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowList.forEach { rt ->
+                                val isSelected = rt == selectedRingtone
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) Color(0xFF141414) else Color.Transparent)
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isSelected) Color(0xFFFF2B2B) else Color(0x1AFFFFFF),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable {
+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            selectedRingtone = rt
+                                            com.example.service.AudioSynthPlayer.play(rt)
+                                            coroutineScope.launch {
+                                                delay(1500)
+                                                if (selectedRingtone == rt) {
+                                                    com.example.service.AudioSynthPlayer.stop()
+                                                }
+                                            }
+                                        }
+                                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = rt,
+                                        color = if (isSelected) Color.White else Color(0x99FFFFFF),
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -684,7 +794,7 @@ fun AddAlarmDialog(
                             val finalHour = hour.toIntOrNull()?.coerceIn(0, 23) ?: 7
                             val finalMinute = minute.toIntOrNull()?.coerceIn(0, 59) ?: 0
                             val daysString = selectedDays.joinToString(",")
-                            onAdd(finalHour, finalMinute, daysString, label, true)
+                            onAdd(finalHour, finalMinute, daysString, label, true, selectedRingtone)
                         },
                         modifier = Modifier
                             .weight(1f)

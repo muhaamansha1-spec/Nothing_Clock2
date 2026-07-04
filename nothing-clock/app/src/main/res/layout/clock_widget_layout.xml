@@ -5,37 +5,43 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@android:color/transparent"
-    android:padding="8dp">
+    android:background="@drawable/widget_background"
+    android:padding="16dp">
 
-    <!-- Digital TextClock for the numbers (float purely, no card container) -->
-    <TextClock
-        android:id="@+id/widget_text_clock"
+    <!-- Programmatically drawn dot matrix clock display -->
+    <ImageView
+        android:id="@+id/widget_dot_matrix_image"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:format12Hour="h:mm"
-        android:format24Hour="HH:mm"
-        android:textColor="#FFFFFF"
-        android:textSize="52sp"
-        android:fontFamily="@font/dotmatrix"
-        android:textStyle="bold"
-        android:letterSpacing="-0.03"
-        android:gravity="center"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="4dp"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true"
         android:background="@android:color/transparent" />
 
-    <!-- Synchronized auto-updating Date / Day text beneath -->
-    <TextClock
-        android:id="@+id/widget_date_clock"
+    <!-- Dock text styled row: date -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:format12Hour="EEE, MMM d"
-        android:format24Hour="EEE, MMM d"
-        android:textColor="#B3FFFFFF"
-        android:textSize="12sp"
-        android:fontFamily="@font/dotmatrix"
-        android:letterSpacing="0.25"
-        android:gravity="center"
-        android:layout_marginTop="2dp"
-        android:background="@android:color/transparent" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="4dp">
+
+        <!-- Muted Date/Day text -->
+        <TextClock
+            android:id="@+id/widget_date_clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:format12Hour="EEEE, d MMMM"
+            android:format24Hour="EEEE, d MMMM"
+            android:textColor="#888888"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:letterSpacing="0.2"
+            android:gravity="center" />
+
+    </LinearLayout>
 
 </LinearLayout>
