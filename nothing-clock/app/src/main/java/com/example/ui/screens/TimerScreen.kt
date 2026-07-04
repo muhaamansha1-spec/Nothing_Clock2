@@ -4,9 +4,13 @@ import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,18 +34,22 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.components.DotMatrixString
 import com.example.ui.viewmodel.TimerState
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimerScreen(
     durationInput: Long,
     secondsRemaining: Long,
     timerState: TimerState,
     percentage: Float,
+    timerRingtone: String,
+    onSetTimerRingtone: (String) -> Unit,
     onSetDuration: (Long) -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onReset: () -> Unit,
     onClear: () -> Unit
 ) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Current input configuration states for HOURS, MINUTES, SECONDS
     var sHours by remember { mutableStateOf(0) }
     var sMinutes by remember { mutableStateOf(5) }
@@ -148,7 +158,8 @@ fun TimerScreen(
                         modifier = Modifier
                             .testTag("apply_timer_btn")
                             .clip(RoundedCornerShape(28.dp))
-                            .background(Color.White)
+                            .background(Color(0xFFFF2B2B)) // High-visibility red
+                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(28.dp))
                             .clickable {
                                 val totalSeconds = (sHours * 3600) + (sMinutes * 60) + sSeconds
                                 if (totalSeconds > 0) {
@@ -160,7 +171,7 @@ fun TimerScreen(
                     ) {
                         Text(
                             text = "START TIMER",
-                            color = Color.Black,
+                            color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 12.sp,
@@ -277,14 +288,16 @@ fun TimerScreen(
             }
         }
     } else {
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
+                .verticalScroll(scrollState)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.weight(0.1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (timerState == TimerState.IDLE) {
                 // Configuration mode: custom slider columns / quick set increments inside a card
@@ -362,11 +375,89 @@ fun TimerScreen(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // Pill start button
+                // Timer Ringtone Section inside a clean card
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(24.dp))
+                        .background(Color(0xFF0C0C0F))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "TIMER RINGTONE",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val ringtones = com.example.service.CustomRingtoneManager.getAllRingtones()
+                    val coroutineScope = rememberCoroutineScope()
+                    
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ringtones.chunked(3).forEach { rowList ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowList.forEach { rt ->
+                                    val isSelected = rt == timerRingtone
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) Color(0xFF1E1E24) else Color(0x0FFFFFFF))
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isSelected) Color(0xFFFF2B2B) else Color(0x1AFFFFFF),
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                onSetTimerRingtone(rt)
+                                                com.example.service.AudioSynthPlayer.play(rt)
+                                                coroutineScope.launch {
+                                                    delay(1500)
+                                                    // Stop preview after 1.5s
+                                                    if (timerRingtone == rt) {
+                                                        com.example.service.AudioSynthPlayer.stop()
+                                                    }
+                                                }
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = rt,
+                                            color = if (isSelected) Color.White else Color(0x99FFFFFF),
+                                            fontSize = 9.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            maxLines = 1,
+                                            modifier = Modifier.basicMarquee()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
                 Box(
                     modifier = Modifier
                         .testTag("apply_timer_btn")
+                        .fillMaxWidth() // Span fully across for ultimate visibility and touch-target size
                         .clip(RoundedCornerShape(28.dp))
-                        .background(Color.White)
+                        .background(Color(0xFFFF2B2B)) // High-visibility red
+                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(28.dp))
                         .clickable {
                             val totalSeconds = (sHours * 3600) + (sMinutes * 60) + sSeconds
                             if (totalSeconds > 0) {
@@ -374,15 +465,16 @@ fun TimerScreen(
                                 onStart()
                             }
                         }
-                        .padding(horizontal = 48.dp, vertical = 16.dp)
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "START TIMER",
-                        color = Color.Black,
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        letterSpacing = 1.sp
+                        fontSize = 14.sp,
+                        letterSpacing = 2.sp
                     )
                 }
             } else {
@@ -487,7 +579,7 @@ fun TimerScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.weight(0.1f))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

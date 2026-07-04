@@ -11,7 +11,8 @@ data class Alarm(
     val daysOfWeek: String, // Comma separated days, e.g., "Mon,Tue,Wed" or "" for one-time
     val label: String = "",
     val isEnabled: Boolean = true,
-    val isVibrateEnabled: Boolean = true
+    val isVibrateEnabled: Boolean = true,
+    val ringtone: String = "GLYPH RAPID"
 ) {
     val isRecurring: Boolean
         get() = daysOfWeek.isNotEmpty()

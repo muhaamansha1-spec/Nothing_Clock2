@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import com.example.data.model.Alarm
 import com.example.data.model.WorldClock
 
-@Database(entities = [Alarm::class, WorldClock::class], version = 1, exportSchema = false)
+@Database(entities = [Alarm::class, WorldClock::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun alarmDao(): AlarmDao

@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,6 +39,7 @@ import java.util.*
 fun WorldClockScreen(
     currentTimestamp: Long,
     clocks: List<WorldClock>,
+    is24Hour: Boolean = true,
     onAddClock: (cityName: String, timezoneId: String, country: String) -> Unit,
     onDeleteClock: (WorldClock) -> Unit
 ) {
@@ -81,7 +86,8 @@ fun WorldClockScreen(
             ) {
                 val cal = Calendar.getInstance()
                 val tzName = cal.timeZone.id.substringAfter("/").replace("_", " ")
-                val mainTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(currentTimestamp))
+                val timePattern = if (is24Hour) "HH:mm" else "hh:mm a"
+                val mainTime = SimpleDateFormat(timePattern, Locale.getDefault()).format(Date(currentTimestamp))
                 
                 Text(
                     text = "LOCAL TIME · $tzName".uppercase(),
@@ -111,6 +117,11 @@ fun WorldClockScreen(
                     .fillMaxWidth()
                     .height(1.dp)
                     .background(Color(0xFF161616))
+            )
+
+            NothingWorldMap(
+                clocks = clocks,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
             )
 
             if (clocks.isEmpty()) {
@@ -155,6 +166,7 @@ fun WorldClockScreen(
                         WorldClockItemRow(
                             clock = clock,
                             currentTimestamp = currentTimestamp,
+                            is24Hour = is24Hour,
                             onDelete = { onDeleteClock(clock) }
                         )
                     }
@@ -213,13 +225,16 @@ fun WorldClockScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WorldClockItemRow(
     clock: WorldClock,
     currentTimestamp: Long,
+    is24Hour: Boolean,
     onDelete: () -> Unit
 ) {
-    val formatter = SimpleDateFormat("hh:mm a", Locale.getDefault()).apply {
+    val pattern = if (is24Hour) "HH:mm" else "hh:mm a"
+    val formatter = SimpleDateFormat(pattern, Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone(clock.timezoneId)
     }
     
@@ -251,14 +266,20 @@ fun WorldClockItemRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
                 Text(
                     text = clock.cityName.uppercase(),
                     color = Color.White,
                     fontSize = 18.sp,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee()
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -267,7 +288,9 @@ fun WorldClockItemRow(
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee()
                 )
             }
 
@@ -462,6 +485,208 @@ fun AddCityDialog(
                         fontSize = 12.sp
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun NothingWorldMap(
+    clocks: List<WorldClock>,
+    modifier: Modifier = Modifier
+) {
+    val cityCoordinates = remember {
+        mapOf(
+            "london" to Pair(0.48f, 0.25f),
+            "new york" to Pair(0.28f, 0.35f),
+            "auckland" to Pair(0.95f, 0.88f),
+            "bangkok" to Pair(0.77f, 0.52f),
+            "beijing" to Pair(0.80f, 0.35f),
+            "berlin" to Pair(0.52f, 0.25f),
+            "cairo" to Pair(0.57f, 0.42f),
+            "cape town" to Pair(0.53f, 0.78f),
+            "chicago" to Pair(0.24f, 0.35f),
+            "dubai" to Pair(0.63f, 0.45f),
+            "hong kong" to Pair(0.80f, 0.48f),
+            "istanbul" to Pair(0.55f, 0.35f),
+            "los angeles" to Pair(0.12f, 0.40f),
+            "mumbai" to Pair(0.70f, 0.50f),
+            "paris" to Pair(0.49f, 0.27f),
+            "rio de janeiro" to Pair(0.38f, 0.70f),
+            "seoul" to Pair(0.83f, 0.36f),
+            "singapore" to Pair(0.77f, 0.58f),
+            "sydney" to Pair(0.92f, 0.82f),
+            "tokyo" to Pair(0.86f, 0.38f),
+            "vancouver" to Pair(0.12f, 0.25f)
+        )
+    }
+
+    val mapRows = remember {
+        listOf(
+            "........X.......X...............", // 0
+            "......XXX......XX......XXXXX....", // 1
+            "    XXXXX    XXXXXX  XXXXXXXXX. ", // 2
+            "   XXXXXX   XXXXXXXXXXXXXXXXXXX ", // 3
+            "   XXXXXX   XXXXXXXXXXXXXXXXXX  ", // 4
+            "   .XXXX.   .XXXXXXXXXXXXXXXXX. ", // 5
+            "    .XX.     .XXXXXXXXXXXXXXX.  ", // 6
+            "     ..      .XXXX..X...XXXX.   ", // 7
+            "             .XXX.     .XXXX.   ", // 8
+            "              XX.       .XX.    ", // 9
+            "              X.                ", // 10
+            "                                "  // 11
+        )
+    }
+
+    val top5Clocks = remember(clocks) { clocks.take(5) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseRadius by infiniteTransition.animateFloat(
+        initialValue = 3f,
+        targetValue = 9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radius"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "alpha"
+    )
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(160.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF0C0C0F))
+            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(20.dp))
+    ) {
+        val width = maxWidth
+        val height = maxHeight
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val rows = 12
+            val cols = 32
+            val cellWidth = size.width / cols
+            val cellHeight = size.height / rows
+
+            // Draw dot grid
+            for (r in 0 until rows) {
+                val rowStr = mapRows.getOrNull(r) ?: ""
+                for (c in 0 until cols) {
+                    val isLand = rowStr.getOrNull(c) == 'X' || rowStr.getOrNull(c) == '.'
+                    val color = if (isLand) Color(0x2EFFFFFF) else Color(0x0AFFFFFF)
+                    val cx = c * cellWidth + cellWidth / 2f
+                    val cy = r * cellHeight + cellHeight / 2f
+                    drawCircle(
+                        color = color,
+                        radius = 1.5.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(cx, cy)
+                    )
+                }
+            }
+
+            // Draw technical lines (coordinate axes or grid lines)
+            val accentPaintColor = Color(0x14FFFFFF)
+            drawLine(
+                color = accentPaintColor,
+                start = androidx.compose.ui.geometry.Offset(0f, size.height / 2f),
+                end = androidx.compose.ui.geometry.Offset(size.width, size.height / 2f),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawLine(
+                color = accentPaintColor,
+                start = androidx.compose.ui.geometry.Offset(size.width / 2f, 0f),
+                end = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height),
+                strokeWidth = 1.dp.toPx()
+            )
+
+            // Draw pulsing and solid pins
+            top5Clocks.forEach { clock ->
+                val key = clock.cityName.lowercase()
+                val coords = cityCoordinates[key] ?: run {
+                    val offsetHrs = TimeZone.getTimeZone(clock.timezoneId).rawOffset / (1000 * 60 * 60f)
+                    val fx = (0.48f + (offsetHrs / 12f) * 0.45f).coerceIn(0.05f, 0.95f)
+                    Pair(fx, 0.4f)
+                }
+
+                val px = coords.first * size.width
+                val py = coords.second * size.height
+
+                // Pulse ring
+                drawCircle(
+                    color = Color(0xFFFF2B2B),
+                    radius = pulseRadius.dp.toPx(),
+                    alpha = pulseAlpha,
+                    center = androidx.compose.ui.geometry.Offset(px, py)
+                )
+
+                // Solid center
+                drawCircle(
+                    color = Color(0xFFFF2B2B),
+                    radius = 3.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(px, py)
+                )
+            }
+        }
+
+        // Technical borders/labels
+        Text(
+            text = "NOTHING GLYPH WORLD PROJECTION",
+            color = Color(0x33FFFFFF),
+            fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(10.dp)
+        )
+
+        Text(
+            text = "PINNED CITIES: ${top5Clocks.size}/5",
+            color = Color(0x33FFFFFF),
+            fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(10.dp)
+        )
+
+        // Labels
+        top5Clocks.forEach { clock ->
+            val key = clock.cityName.lowercase()
+            val coords = cityCoordinates[key] ?: run {
+                val offsetHrs = TimeZone.getTimeZone(clock.timezoneId).rawOffset / (1000 * 60 * 60f)
+                val fx = (0.48f + (offsetHrs / 12f) * 0.45f).coerceIn(0.05f, 0.95f)
+                Pair(fx, 0.4f)
+            }
+
+            val xDp = width * coords.first
+            val yDp = height * coords.second
+
+            // Draw a tiny visual label card next to the dot coordinate
+            Box(
+                modifier = Modifier
+                    .offset(x = xDp - 16.dp, y = yDp - 15.dp)
+                    .background(Color(0xE60A0A0C), RoundedCornerShape(4.dp))
+                    .border(0.5.dp, Color(0x26FFFFFF), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 3.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = clock.cityName.uppercase().take(3),
+                    color = Color.White,
+                    fontSize = 7.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
